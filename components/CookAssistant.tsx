@@ -1,0 +1,410 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckIcon, CloseIcon, SendIcon, SparkIcon, Spinner } from "@/components/icons";
+import { formatIngredient, formatMinutes } from "@/lib/recipes/scale";
+import type { Recipe } from "@/lib/types";
+
+type Message = { role: "user" | "assistant"; content: string };
+
+const QUICK_QUESTIONS = [
+  "Can I swap an ingredient?",
+  "How do I know it's done?",
+  "What usually goes wrong here?",
+];
+
+/** Short beep so a timer can finish while you are across the kitchen. */
+function beep() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.9);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.95);
+  } catch {
+    // Audio is a nicety — never let it break the timer.
+  }
+}
+
+export function CookAssistant({
+  recipe,
+  servings,
+  onClose,
+}: {
+  recipe: Recipe;
+  servings: number;
+  onClose: () => void;
+}) {
+  const steps = recipe.steps;
+  const [index, setIndex] = useState(0);
+  const [done, setDone] = useState(false);
+  const [showIngredients, setShowIngredients] = useState(false);
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [question, setQuestion] = useState("");
+  const [asking, setAsking] = useState(false);
+
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [timerRunning, setTimerRunning] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const step = steps[index];
+
+  // ------------------------------------------------------------ wake lock
+  useEffect(() => {
+    type WakeLock = { release: () => Promise<void> };
+    let sentinel: WakeLock | null = null;
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<WakeLock> };
+    };
+
+    const acquire = async () => {
+      try {
+        sentinel = (await nav.wakeLock?.request("screen")) ?? null;
+      } catch {
+        // Unsupported or denied — the screen just dims as usual.
+      }
+    };
+    void acquire();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      void sentinel?.release().catch(() => undefined);
+    };
+  }, []);
+
+  // Lock background scroll while the assistant owns the screen.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  // ---------------------------------------------------------------- timer
+  useEffect(() => {
+    if (!timerRunning || secondsLeft === null) return;
+    if (secondsLeft <= 0) {
+      setTimerRunning(false);
+      beep();
+      return;
+    }
+    const id = setTimeout(() => setSecondsLeft((s) => (s ?? 0) - 1), 1000);
+    return () => clearTimeout(id);
+  }, [timerRunning, secondsLeft]);
+
+  // Reset the timer whenever the step changes.
+  useEffect(() => {
+    setSecondsLeft(step?.minutes ? step.minutes * 60 : null);
+    setTimerRunning(false);
+  }, [index, step?.minutes]);
+
+  const goNext = useCallback(() => {
+    setIndex((current) => {
+      if (current >= steps.length - 1) {
+        setDone(true);
+        return current;
+      }
+      return current + 1;
+    });
+  }, [steps.length]);
+
+  const goBack = useCallback(() => {
+    setDone(false);
+    setIndex((current) => Math.max(0, current - 1));
+  }, []);
+
+  // ------------------------------------------------------------- keyboard
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement) return;
+      if (event.key === "ArrowRight") goNext();
+      if (event.key === "ArrowLeft") goBack();
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goNext, goBack, onClose]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [index]);
+
+  async function ask(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || asking) return;
+
+    const history = messages.slice(-6);
+    setMessages((current) => [...current, { role: "user", content: trimmed }]);
+    setQuestion("");
+    setAsking(true);
+
+    try {
+      const response = await fetch("/api/assistant", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          recipeId: recipe.id,
+          question: trimmed,
+          stepIndex: index,
+          servings,
+          history,
+        }),
+      });
+      const data = (await response.json()) as { answer?: string; error?: string };
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          content:
+            data.answer ??
+            data.error ??
+            "Something went wrong. Try asking again.",
+        },
+      ]);
+    } catch {
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", content: "Could not reach the assistant." },
+      ]);
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  const progress = done ? 100 : ((index + 1) / steps.length) * 100;
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-white">
+      {/* ------------------------------------------------------------ header */}
+      <div className="border-b border-line">
+        <div className="mx-auto flex h-14 w-full max-w-content items-center justify-between px-5">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{recipe.title}</p>
+            <p className="text-xs text-muted">
+              {done ? "Finished" : `Step ${index + 1} of ${steps.length}`} ·{" "}
+              {servings} servings
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="-mr-2 rounded-lg p-2 text-muted hover:text-ink"
+            aria-label="Close cooking mode"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="h-1 w-full bg-line">
+          <div
+            className="h-1 bg-accent transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- body */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-content px-5 py-8">
+          {done ? (
+            <div className="text-center">
+              <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent">
+                <CheckIcon className="h-8 w-8 text-ink" />
+              </span>
+              <h2 className="mt-5 text-2xl font-semibold tracking-tight">
+                That&apos;s it — enjoy.
+              </h2>
+              <p className="meta mt-2">
+                {recipe.title} for {servings}.
+              </p>
+              <button type="button" className="btn-accent mt-8 w-full" onClick={onClose}>
+                Done
+              </button>
+              <button
+                type="button"
+                className="btn-ghost mt-2 w-full"
+                onClick={() => {
+                  setDone(false);
+                  setIndex(steps.length - 1);
+                }}
+              >
+                Back to the last step
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="text-[22px] font-medium leading-snug md:text-[26px]">
+                {step?.text}
+              </p>
+
+              {secondsLeft !== null ? (
+                <div className="card mt-6 flex items-center justify-between p-4">
+                  <div>
+                    <p className="text-3xl font-semibold tabular-nums">
+                      {Math.floor(secondsLeft / 60)}:
+                      {String(secondsLeft % 60).padStart(2, "0")}
+                    </p>
+                    <p className="meta mt-0.5">
+                      {step?.minutes ? formatMinutes(step.minutes) : ""} for this step
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary btn-sm"
+                      onClick={() => {
+                        setSecondsLeft(step?.minutes ? step.minutes * 60 : 0);
+                        setTimerRunning(false);
+                      }}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-accent btn-sm"
+                      onClick={() => setTimerRunning((running) => !running)}
+                    >
+                      {timerRunning ? "Pause" : secondsLeft > 0 ? "Start" : "Done"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* --------------------------------------------- ingredients */}
+              <button
+                type="button"
+                className="mt-6 text-sm text-muted hover:text-ink"
+                onClick={() => setShowIngredients((open) => !open)}
+              >
+                {showIngredients ? "Hide" : "Show"} ingredients (
+                {recipe.ingredients.length})
+              </button>
+              {showIngredients ? (
+                <ul className="card mt-3 divide-y divide-line">
+                  {recipe.ingredients.map((ingredient, i) => {
+                    const line = formatIngredient(
+                      ingredient,
+                      recipe.base_servings,
+                      servings,
+                    );
+                    return (
+                      <li key={i} className="flex gap-3 px-4 py-2.5 text-[15px]">
+                        <span className="w-24 shrink-0 font-medium tabular-nums">
+                          {line.amount || "—"}
+                        </span>
+                        <span>{line.name}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+
+              {/* ----------------------------------------------- assistant */}
+              <div className="mt-10 border-t border-line pt-6">
+                <div className="flex items-center gap-2">
+                  <SparkIcon className="h-4 w-4 text-muted" />
+                  <p className="text-sm font-medium">Ask about this step</p>
+                </div>
+
+                {messages.length === 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {QUICK_QUESTIONS.map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        className="rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:border-ink hover:text-ink"
+                        onClick={() => void ask(q)}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {messages.map((message, i) => (
+                      <div
+                        key={i}
+                        className={
+                          message.role === "user"
+                            ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-ink px-4 py-2.5 text-[15px] text-white"
+                            : "mr-auto max-w-[90%] rounded-2xl rounded-bl-sm bg-surface px-4 py-2.5 text-[15px]"
+                        }
+                      >
+                        {message.content}
+                      </div>
+                    ))}
+                    {asking ? (
+                      <div className="mr-auto flex items-center gap-2 rounded-2xl bg-surface px-4 py-2.5 text-muted">
+                        <Spinner className="h-4 w-4" />
+                        Thinking…
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                <form
+                  className="mt-4 flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void ask(question);
+                  }}
+                >
+                  <input
+                    className="input"
+                    placeholder="Type a question…"
+                    value={question}
+                    onChange={(event) => setQuestion(event.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className="btn-secondary shrink-0 px-4"
+                    disabled={!question.trim() || asking}
+                    aria-label="Send question"
+                  >
+                    <SendIcon className="h-5 w-5" />
+                  </button>
+                </form>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------ footer */}
+      {!done ? (
+        <div className="border-t border-line bg-white pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto flex w-full max-w-content gap-2 px-5 py-3">
+            <button
+              type="button"
+              className="btn-secondary flex-1"
+              onClick={goBack}
+              disabled={index === 0}
+            >
+              Back
+            </button>
+            <button type="button" className="btn-accent flex-[2]" onClick={goNext}>
+              {index === steps.length - 1 ? "Finish" : "Next step"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
