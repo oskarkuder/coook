@@ -279,3 +279,54 @@ supabase/migrations/           the schema
   writes it directly, so the paywall can never drift out of sync with Stripe.
 - **RLS is on for every table.** Even with a leaked anon key, one user cannot
   read another's recipes.
+
+---
+
+## Production launch checklist
+
+Work down this list; `/api/health` verifies most of it for you.
+
+### Before the first deploy
+
+- [ ] All four migrations run in the **new** Supabase project:
+      `0001_init`, `0002_categories`, `0003_shopping_extra_recipes`, `0004_recipe_images`
+- [ ] Google OAuth enabled, redirect URI points at the Supabase project
+- [ ] `CRON_SECRET` generated (`openssl rand -hex 32`)
+- [ ] OpenAI account has **credit** — a valid key with a zero balance returns
+      `429 insufficient_quota` and every import fails
+- [ ] Stripe **live-mode** product with two prices: $10/month and €30/year
+- [ ] `NEXT_PUBLIC_DEMO_MODE=0` — this is the one that bites, because the app
+      looks fine in demo mode while saving nothing
+
+### Vercel
+
+- [ ] New project, imported from `github.com/oskarkuder/coook`
+- [ ] Every variable from `.env.local.example` set for **Production** and **Preview**
+- [ ] `NEXT_PUBLIC_APP_ORIGIN` = your real domain, no trailing slash
+- [ ] Deploy
+
+### After the first deploy
+
+- [ ] Point Supabase **Site URL** and **Redirect URLs** at the real domain
+- [ ] Point the Stripe **webhook endpoint** at `https://your-domain/api/stripe/webhook`
+      and copy the live signing secret into `STRIPE_WEBHOOK_SECRET`
+- [ ] Run the preflight:
+
+      ```bash
+      curl -H "authorization: Bearer $CRON_SECRET" https://your-domain/api/health
+      ```
+
+      It returns 200 when everything passes, or 503 listing exactly what is wrong.
+
+- [ ] Smoke test end to end: sign up with Google → paste a recipe-site link →
+      paste a TikTok link → subscribe with a real card → confirm the Account page
+      flips to subscribed → cancel from the billing portal
+
+### Known gaps at launch
+
+- **Media resolver**: without one, speech-only TikTok/Instagram videos fail in
+  production even though they work from your laptop, because the platforms
+  block datacenter IPs. Captions and recipe sites are unaffected.
+- **Currency mix**: monthly is USD, yearly is EUR. Stripe is fine with it;
+  customers see two currencies on one page.
+- **Slovenian**: not built yet.

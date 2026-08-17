@@ -2,8 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, CloseIcon } from "@/components/icons";
-import { formatIngredient, formatMinutes } from "@/lib/recipes/scale";
+import {
+  formatIngredient,
+  formatMinutes,
+  totalTimeMinutes,
+} from "@/lib/recipes/scale";
 import { stepHasUsefulTimer } from "@/lib/recipes/timers";
+import { ingredientsForStep } from "@/lib/recipes/stepIngredients";
 import type { Recipe } from "@/lib/types";
 
 /** Short beep so a timer can finish while you are across the kitchen. */
@@ -42,6 +47,8 @@ export function CookAssistant({
   const steps = recipe.steps;
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
+  // Nobody starts cooking without checking they have everything first.
+  const [started, setStarted] = useState(false);
   const [showIngredients, setShowIngredients] = useState(false);
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
@@ -49,6 +56,9 @@ export function CookAssistant({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const step = steps[index];
+  const stepIngredients = step
+    ? ingredientsForStep(step, recipe.ingredients)
+    : [];
 
   // ------------------------------------------------------------ wake lock
   useEffect(() => {
@@ -137,7 +147,11 @@ export function CookAssistant({
     scrollRef.current?.scrollTo({ top: 0 });
   }, [index]);
 
-  const progress = done ? 100 : ((index + 1) / steps.length) * 100;
+  const progress = done
+    ? 100
+    : !started
+      ? 0
+      : ((index + 1) / steps.length) * 100;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white">
@@ -147,8 +161,12 @@ export function CookAssistant({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{recipe.title}</p>
             <p className="text-xs text-muted">
-              {done ? "Finished" : `Step ${index + 1} of ${steps.length}`} ·{" "}
-              {servings} servings
+              {done
+                ? "Finished"
+                : !started
+                  ? "Before you start"
+                  : `Step ${index + 1} of ${steps.length}`}{" "}
+              · {servings} servings
             </p>
           </div>
           <button
@@ -171,7 +189,51 @@ export function CookAssistant({
       {/* ------------------------------------------------------------- body */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-content px-5 py-8">
-          {done ? (
+          {!done && !started ? (
+            <div>
+              <h2 className="text-[22px] font-medium leading-snug md:text-[26px]">
+                Get everything out first
+              </h2>
+              <p className="meta mt-2">
+                Everything below is scaled to {servings}{" "}
+                {servings === 1 ? "serving" : "servings"}.
+                {totalTimeMinutes(recipe.prep_minutes, recipe.cook_minutes) > 0
+                  ? ` About ${formatMinutes(totalTimeMinutes(recipe.prep_minutes, recipe.cook_minutes))} in total.`
+                  : ""}
+              </p>
+
+              <ul className="card mt-5 divide-y divide-line">
+                {recipe.ingredients.map((ingredient, i) => {
+                  const line = formatIngredient(
+                    ingredient,
+                    recipe.base_servings,
+                    servings,
+                  );
+                  return (
+                    <li key={i} className="flex gap-3 p-4">
+                      <span className="w-24 shrink-0 font-medium tabular-nums">
+                        {line.amount || "—"}
+                      </span>
+                      <span className="flex-1">
+                        {line.name}
+                        {line.note ? (
+                          <span className="text-muted">, {line.note}</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <button
+                type="button"
+                className="btn-accent mt-6 w-full"
+                onClick={() => setStarted(true)}
+              >
+                Start cooking — {steps.length} steps
+              </button>
+            </div>
+          ) : done ? (
             <div className="text-center">
               <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-accent">
                 <CheckIcon className="h-8 w-8 text-ink" />
@@ -235,13 +297,38 @@ export function CookAssistant({
                 </div>
               ) : null}
 
-              {/* --------------------------------------------- ingredients */}
+              {/* ------------------------------ what this step needs */}
+              {stepIngredients.length > 0 ? (
+                <div className="mt-6">
+                  <p className="text-xs uppercase tracking-wide text-muted">
+                    For this step
+                  </p>
+                  <ul className="card mt-2 divide-y divide-line">
+                    {stepIngredients.map((ingredient, i) => {
+                      const line = formatIngredient(
+                        ingredient,
+                        recipe.base_servings,
+                        servings,
+                      );
+                      return (
+                        <li key={i} className="flex gap-3 px-4 py-2.5 text-[15px]">
+                          <span className="w-24 shrink-0 font-medium tabular-nums">
+                            {line.amount || "—"}
+                          </span>
+                          <span>{line.name}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ) : null}
+
               <button
                 type="button"
-                className="mt-6 text-sm text-muted hover:text-ink"
+                className="mt-4 text-sm text-muted hover:text-ink"
                 onClick={() => setShowIngredients((open) => !open)}
               >
-                {showIngredients ? "Hide" : "Show"} ingredients (
+                {showIngredients ? "Hide" : "Show"} all ingredients (
                 {recipe.ingredients.length})
               </button>
               {showIngredients ? (
@@ -263,14 +350,13 @@ export function CookAssistant({
                   })}
                 </ul>
               ) : null}
-
             </>
           )}
         </div>
       </div>
 
       {/* ------------------------------------------------------------ footer */}
-      {!done ? (
+      {!done && started ? (
         <div className="border-t border-line bg-white pb-[env(safe-area-inset-bottom)]">
           <div className="mx-auto flex w-full max-w-content gap-2 px-5 py-3">
             <button
