@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getApiSession, unauthorized, badRequest } from "@/lib/api/session";
 import { getStore } from "@/lib/data";
+import { removeThumbnail } from "@/lib/images/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,9 @@ export async function DELETE(_request: Request, { params }: Context) {
 
   const ok = await getStore().deleteRecipe(user.id, id);
   if (!ok) return badRequest("Could not delete that recipe.");
+
+  // Best effort — a leftover image must never fail the delete.
+  await removeThumbnail(user.id, id);
 
   return NextResponse.json({ ok: true });
 }

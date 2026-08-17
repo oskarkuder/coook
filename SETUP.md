@@ -19,8 +19,9 @@ no Stripe and no Vercel you get:
 Everything lives in memory and disappears when the dev server restarts. A yellow
 banner across the top makes sure you never mistake it for the real thing.
 
-Recipe extraction is fully deterministic, so it works in demo mode with no
-keys at all — paste a recipe-site link and you get the real thing.
+**For real extraction you need `OPENAI_API_KEY`** even in demo mode — every
+import is transcribed and structured. Without it you can still click through
+every screen with the sample data.
 
 When you are ready for the real backend, set `NEXT_PUBLIC_DEMO_MODE=0` and work
 through the rest of this file.
@@ -42,7 +43,11 @@ Work through it top to bottom. It takes about 20 minutes.
 2. Open **SQL Editor → New query**, paste the entire contents of
    [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) and run it.
    Then do the same with
-   [`supabase/migrations/0002_categories.sql`](supabase/migrations/0002_categories.sql).
+   [`supabase/migrations/0002_categories.sql`](supabase/migrations/0002_categories.sql),
+   [`0003_shopping_extra_recipes.sql`](supabase/migrations/0003_shopping_extra_recipes.sql)
+   and [`0004_recipe_images.sql`](supabase/migrations/0004_recipe_images.sql).
+   The last one creates the public `recipe-images` storage bucket that holds
+   permanent copies of video thumbnails.
    It creates `profiles`, `recipes`, `meal_plan_entries` and `shopping_state`,
    turns on row-level security for all of them, and adds the trigger that
    creates a profile row on signup.
@@ -82,7 +87,25 @@ lets people in immediately — fine for testing, less good for production.
 ---
 
 
-## 2. Stripe
+## 2. OpenAI
+
+1. Create a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+   → `OPENAI_API_KEY`.
+2. Leave the models at their defaults unless you have a reason:
+   - `OPENAI_MODEL=gpt-4.1-mini` — caption + transcript → structured recipe
+   - `OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe` — the video's audio
+
+Every import runs both, so budget roughly **$0.005–0.01 per recipe**, dominated
+by transcription (~$0.003 per minute of video). Set a spend limit on the OpenAI
+account before you launch.
+
+Recipe websites are the exception worth knowing about: the app reads their
+published `schema.org/Recipe` markup first and hands it to the model as the
+source of truth, so exact amounts survive rather than being reworded.
+
+---
+
+## 3. Stripe
 
 1. **Products → Add product**: name it *Coook! Unlimited*, price **$10.00 USD,
    recurring monthly**. Copy the **price ID** (`price_…`) → `STRIPE_PRICE_MONTHLY`.
@@ -121,7 +144,7 @@ Use the `whsec_…` that command prints as your local `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
-## 3. Local development
+## 4. Local development
 
 ```bash
 cp .env.local.example .env.local
@@ -155,7 +178,7 @@ Open http://localhost:3000.
 
 ---
 
-## 4. Vercel
+## 5. Vercel
 
 1. Push this folder to a new GitHub repository.
 2. Import it as a **new Vercel project** (do not reuse the PiscesAI project).
@@ -173,7 +196,7 @@ Hobby limit; no configuration needed.
 
 ---
 
-## 5. Optional: media resolver
+## 6. Optional: media resolver
 
 `MEDIA_RESOLVER_URL` and `MEDIA_RESOLVER_KEY` are the escape hatch for the one
 genuinely fragile part of this app.

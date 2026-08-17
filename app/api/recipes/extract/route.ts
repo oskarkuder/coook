@@ -4,6 +4,7 @@ import { getStore } from "@/lib/data";
 import { getEntitlement } from "@/lib/entitlements";
 import { extractRecipe } from "@/lib/extract/pipeline";
 import { detectPlatform, normalizeSourceUrl } from "@/lib/extract/sourceUrl";
+import { persistThumbnail } from "@/lib/images/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,13 +76,21 @@ export async function POST(request: Request) {
 
     const { recipe, metadata } = outcome;
 
+    // Keep our own copy — platform CDN URLs are signed and expire.
+    const thumbnailUrl = await persistThumbnail(
+      metadata.thumbnailUrl,
+      user.id,
+      recipeId,
+      outcome.url,
+    );
+
     await store.markRecipeReady(user.id, recipeId, {
       platform: outcome.platform,
       url: outcome.url,
       author: metadata.author,
-      thumbnailUrl: metadata.thumbnailUrl,
+      thumbnailUrl,
       caption: metadata.caption,
-      transcript: null,
+      transcript: outcome.transcript,
       title: recipe.title,
       summary: recipe.summary,
       cuisine: recipe.cuisine,

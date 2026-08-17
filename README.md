@@ -21,25 +21,27 @@ See [SETUP.md](SETUP.md) to connect the real backend.
 - **Next.js 15** (App Router, React 19, TypeScript, Tailwind)
 - **Supabase** — auth (Google + email/password), Postgres with RLS on every table
 - **Stripe** — one $10/month subscription, webhook-driven
-- **No AI, no third-party model calls** — recipes are parsed deterministically
+- **OpenAI** — transcription plus structured recipe extraction on every import
 
 ## How the extraction works
 
-Two deterministic routes, no model anywhere:
+One path for every link, so the result is consistent whatever you paste:
 
 ```
-recipe website  → schema.org/Recipe JSON-LD → exact recipe   lib/extract/website.ts
-social caption  → rule-based text parser    → parsed recipe  lib/extract/parseRecipeText.ts
+gather   published schema.org/Recipe markup (recipe sites)
+       + the post caption
+       + a transcript of the audio          lib/extract/transcribe.ts
+   →    one structuring pass                lib/extract/structure.ts
 ```
 
-Almost every food site publishes structured recipe markup, so a website import
-is exact and instant. Social captions are parsed by rules: a real ingredient
-parser handles `1 1/2 cups plain flour, sifted`, vulgar fractions, ranges and
-30+ unit spellings. Nutrition comes from a built-in food table — and returns
-nothing at all rather than guessing when it cannot identify enough of a recipe.
+The audio is always transcribed when it can be reached, which is what makes
+"paste the link and it just works" true for videos where the creator only says
+the recipe out loud. When a recipe site publishes structured markup, that is
+handed to the model as authoritative so its exact amounts are copied rather
+than reworded.
 
-If a post has no written recipe, the app says so and offers a box to paste it
-in, which runs through the same parser. Nothing is ever invented.
+Video thumbnails are copied into Supabase Storage at import, because social CDN
+URLs are signed and expire.
 
 ## The screens
 
