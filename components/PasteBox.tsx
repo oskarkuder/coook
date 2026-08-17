@@ -9,14 +9,9 @@ import { PLAN } from "@/lib/entitlements";
 type Status = "idle" | "working" | "error" | "paywall" | "needs-text";
 
 /** Shown one after another while the request is in flight. */
-const STAGES = [
-  "Opening the video",
-  "Reading the caption",
-  "Listening to the audio",
-  "Writing the recipe",
-];
+const STAGES = ["Opening the link", "Reading the recipe", "Laying it out"];
 
-const STAGE_MS = 4500;
+const STAGE_MS = 1200;
 
 export function PasteBox({
   initialUrl = "",
@@ -81,7 +76,9 @@ export function PasteBox({
           return;
         }
 
-        if (data.code === "NO_SOURCE_TEXT") {
+        // Both mean the same thing to the user: nothing written to read, so
+        // offer the box that lets them supply it.
+        if (data.code === "NO_SOURCE_TEXT" || data.code === "NOT_A_RECIPE") {
           setStatus("needs-text");
           setMessage(data.error ?? null);
           return;
@@ -151,7 +148,7 @@ export function PasteBox({
             </div>
           ))}
         </div>
-        <p className="meta mt-5">This takes up to half a minute. Keep the page open.</p>
+        <p className="meta mt-5">This only takes a few seconds.</p>
       </div>
     );
   }
@@ -194,7 +191,7 @@ export function PasteBox({
         <h2 className="h2">Couldn&apos;t read that post</h2>
         <p className="meta mt-2">
           {message ??
-            "The post is private or blocked. Copy the recipe text from the caption and paste it here."}
+            "Coook! reads recipes that are written out. Copy the ingredients and steps in and it will lay them out for you."}
         </p>
         <textarea
           className="textarea mt-4 min-h-40"

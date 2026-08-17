@@ -4,7 +4,8 @@ import {
   isoDurationToMinutes,
   parseIngredients,
 } from "@/lib/recipes/parseIngredient";
-import type { StructuredRecipe } from "@/lib/extract/structure";
+import { estimateNutrition } from "@/lib/recipes/nutrition";
+import type { ExtractedRecipe } from "@/lib/extract/types";
 
 /**
  * Recipe websites almost all publish schema.org/Recipe as JSON-LD. Reading it
@@ -153,7 +154,7 @@ function firstImage(value: Json): string | null {
 }
 
 export type WebsiteRecipe = {
-  recipe: StructuredRecipe;
+  recipe: ExtractedRecipe;
   author: string | null;
   thumbnailUrl: string | null;
 };
@@ -213,30 +214,31 @@ export async function readRecipeWebsite(
 
   const nutrition = isRecord(node.nutrition) ? node.nutrition : null;
 
+  const servings = parseServings(node.recipeYield ?? node.yield);
+
   return {
     recipe: {
-      is_recipe: true,
       confidence: "high",
       title: textOf(node.name) ?? "Recipe",
       summary: (textOf(node.description) ?? "").slice(0, 200),
       cuisine: textOf(node.recipeCuisine),
       difficulty: "medium",
-      servings: parseServings(node.recipeYield ?? node.yield),
+      servings,
       prep_minutes: isoDurationToMinutes(node.prepTime),
       cook_minutes:
         isoDurationToMinutes(node.cookTime) ?? isoDurationToMinutes(node.totalTime),
       ingredients,
       steps,
-      // Only claim nutrition when the site published it. No guessing here —
-      // that is what the AI path is for.
-      nutrition_per_serving: nutrition
-        ? {
-            calories: parseNutritionNumber(nutrition.calories),
-            protein_g: parseNutritionNumber(nutrition.proteinContent),
-            carbs_g: parseNutritionNumber(nutrition.carbohydrateContent),
-            fat_g: parseNutritionNumber(nutrition.fatContent),
-          }
-        : { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
+      // The site's own figures win; otherwise work it out from the ingredients.
+      nutrition_per_serving:
+        nutrition && parseNutritionNumber(nutrition.calories) > 0
+          ? {
+              calories: parseNutritionNumber(nutrition.calories),
+              protein_g: parseNutritionNumber(nutrition.proteinContent),
+              carbs_g: parseNutritionNumber(nutrition.carbohydrateContent),
+              fat_g: parseNutritionNumber(nutrition.fatContent),
+            }
+          : estimateNutrition(ingredients, servings),
     },
     author:
       textOf(isRecord(node.author) ? node.author.name : node.author) ??

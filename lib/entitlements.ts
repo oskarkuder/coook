@@ -15,7 +15,7 @@ export const PLAN = {
     "Ingredient scaling for any number of servings",
     "Calories and macros per serving",
     "Weekly meal plan and shopping list",
-    "The cooking assistant, step by step",
+    "Step-by-step cooking mode with timers",
   ],
 } as const;
 

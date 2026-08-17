@@ -45,6 +45,7 @@ export function RecipeView({
   const [planOpen, setPlanOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [cooking, setCooking] = useState(false);
+  const [showSource, setShowSource] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const perServing = recipe.nutrition;
@@ -133,10 +134,10 @@ export function RecipeView({
         onClick={() => setCooking(true)}
       >
         <SparkIcon className="h-5 w-5" />
-        Cook with the assistant
+        Cook step by step
       </button>
       <p className="meta mt-2 text-center">
-        One step at a time, with timers and answers while your hands are busy.
+        One step at a time, with a timer for each and the screen kept awake.
       </p>
 
       {categories.length > 0 ? (
@@ -154,10 +155,11 @@ export function RecipeView({
         </div>
       ) : null}
 
-      {recipe.confidence === "low" ? (
+      {recipe.confidence === "medium" || recipe.confidence === "low" ? (
         <p className="mt-5 rounded-xl border border-line bg-surface p-3 text-sm text-muted">
-          The video was vague about amounts, so some of these are estimates.
-          Taste as you go.
+          The post didn&apos;t label its ingredients and steps, so Coook! worked
+          out where one ended and the other began. Worth a glance before you
+          start.
         </p>
       ) : null}
 
@@ -258,6 +260,35 @@ export function RecipeView({
         </ol>
       </section>
 
+      {/* Everything above was read from this text, word for word. Showing it
+          lets you check the recipe against what the creator actually posted. */}
+      {recipe.source_caption ? (
+        <section className="mt-8">
+          <button
+            type="button"
+            className="text-sm text-muted hover:text-ink"
+            onClick={() => setShowSource((open) => !open)}
+          >
+            {showSource ? "Hide" : "Show"} what the post said
+          </button>
+          {showSource ? (
+            <div className="card mt-3 p-4">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">
+                {recipe.source_caption}
+              </p>
+              <a
+                href={recipe.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-block text-sm text-ink underline"
+              >
+                Open the original and compare
+              </a>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* ---------------------------------------------------------- actions */}
       <section className="mt-10">
         {planOpen ? (
@@ -274,7 +305,7 @@ export function RecipeView({
               onClick={() => setCooking(true)}
             >
               <SparkIcon className="h-5 w-5" />
-              Cook with the assistant
+              Cook step by step
             </button>
 
             <div className="mt-2 grid gap-2 sm:grid-cols-2">

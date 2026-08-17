@@ -21,22 +21,25 @@ See [SETUP.md](SETUP.md) to connect the real backend.
 - **Next.js 15** (App Router, React 19, TypeScript, Tailwind)
 - **Supabase** — auth (Google + email/password), Postgres with RLS on every table
 - **Stripe** — one $10/month subscription, webhook-driven
-- **OpenAI** — audio transcription plus structured recipe extraction
+- **No AI, no third-party model calls** — recipes are parsed deterministically
 
 ## How the extraction works
 
+Two deterministic routes, no model anywhere:
+
 ```
-link → normalise + follow share redirects   lib/extract/sourceUrl.ts
-     → caption, author, thumbnail, media    lib/extract/metadata.ts
-     → transcribe audio, if needed          lib/extract/transcribe.ts
-     → structured recipe JSON               lib/extract/structure.ts
+recipe website  → schema.org/Recipe JSON-LD → exact recipe   lib/extract/website.ts
+social caption  → rule-based text parser    → parsed recipe  lib/extract/parseRecipeText.ts
 ```
 
-The caption is tried first. Only when it does not already contain the recipe
-does the audio get transcribed, which keeps most extractions to a few cents and
-a few seconds. If a post gives up nothing at all — private, or blocked — the
-user is offered a box to paste the caption in by hand, and the same pipeline
-runs on that.
+Almost every food site publishes structured recipe markup, so a website import
+is exact and instant. Social captions are parsed by rules: a real ingredient
+parser handles `1 1/2 cups plain flour, sifted`, vulgar fractions, ranges and
+30+ unit spellings. Nutrition comes from a built-in food table — and returns
+nothing at all rather than guessing when it cannot identify enough of a recipe.
+
+If a post has no written recipe, the app says so and offers a box to paste it
+in, which runs through the same parser. Nothing is ever invented.
 
 ## The screens
 

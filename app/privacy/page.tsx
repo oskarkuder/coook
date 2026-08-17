@@ -12,8 +12,8 @@ export default function PrivacyPage() {
           <ul className="mt-2 list-disc space-y-1 pl-5">
             <li>Your email address, so you can sign in.</li>
             <li>
-              The video links you submit, plus the caption, transcript and
-              recipe generated from each one.
+              The links you submit, plus the caption and the recipe parsed
+              from each one.
             </li>
             <li>Your meal plan and shopping list.</li>
             <li>
@@ -27,9 +27,9 @@ export default function PrivacyPage() {
           <h2 className="h2">Who else sees it</h2>
           <p className="mt-2">
             Supabase hosts the database and authentication. Vercel hosts the
-            app. OpenAI receives the caption and audio of the videos you submit
-            in order to produce the recipe. Stripe handles payment. Nobody else
-            gets your data, and it is never sold.
+            app. Stripe handles payment. Recipes are parsed on our own server —
+            nothing you submit is sent to any AI provider. Nobody else gets your
+            data, and it is never sold.
           </p>
         </section>
 

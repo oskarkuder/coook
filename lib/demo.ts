@@ -121,31 +121,3 @@ export const DEMO_RECIPES: Recipe[] = [
   },
 ];
 
-/** Returned by the extract route when there is no OpenAI key to call. */
-export const DEMO_SAMPLE_EXTRACTION = {
-  title: "Crispy chilli halloumi bowls",
-  summary: "Golden halloumi, a hot honey glaze and whatever grain you have in.",
-  cuisine: "Fusion",
-  difficulty: "easy" as const,
-  servings: 2,
-  prep_minutes: 10,
-  cook_minutes: 12,
-  ingredients: [
-    { name: "halloumi", quantity: 225, unit: "g", note: "cut into thick fingers" },
-    { name: "cornflour", quantity: 2, unit: "tbsp", note: null },
-    { name: "honey", quantity: 2, unit: "tbsp", note: null },
-    { name: "chilli flakes", quantity: 1, unit: "tsp", note: null },
-    { name: "cooked rice", quantity: 400, unit: "g", note: "warm" },
-    { name: "cucumber", quantity: 1, unit: "piece", note: "sliced" },
-    { name: "lime", quantity: 1, unit: "piece", note: "juiced" },
-    { name: "olive oil", quantity: 2, unit: "tbsp", note: null },
-  ],
-  steps: [
-    { text: "Toss the halloumi in cornflour until every side is dusted.", minutes: 2 },
-    { text: "Fry in hot oil, turning once, until deeply golden and crisp.", minutes: 6 },
-    { text: "Kill the heat, add the honey and chilli flakes, and toss to glaze.", minutes: 1 },
-    { text: "Pile onto the rice with the cucumber and squeeze over the lime.", minutes: 2 },
-  ],
-  nutrition_per_serving: { calories: 704, protein_g: 29, carbs_g: 74, fat_g: 32 },
-  confidence: "high" as const,
-};

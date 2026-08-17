@@ -19,9 +19,8 @@ no Stripe and no Vercel you get:
 Everything lives in memory and disappears when the dev server restarts. A yellow
 banner across the top makes sure you never mistake it for the real thing.
 
-**Want real extraction while still in demo mode?** Put a working
-`OPENAI_API_KEY` in `.env.local`. Demo mode then runs the genuine pipeline —
-caption, transcription, the lot — and still keeps everything in memory.
+Recipe extraction is fully deterministic, so it works in demo mode with no
+keys at all — paste a recipe-site link and you get the real thing.
 
 When you are ready for the real backend, set `NEXT_PUBLIC_DEMO_MODE=0` and work
 through the rest of this file.
@@ -82,19 +81,8 @@ lets people in immediately — fine for testing, less good for production.
 
 ---
 
-## 2. OpenAI
 
-1. Create a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys) → `OPENAI_API_KEY`.
-2. Leave the model variables at their defaults unless you have a reason:
-   - `OPENAI_MODEL=gpt-4.1-mini` — turns caption + transcript into the recipe JSON
-   - `OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe` — transcribes the audio
-
-Roughly $0.01–0.02 per recipe, most of it transcription. Add a spend limit on
-the OpenAI account before launch.
-
----
-
-## 3. Stripe
+## 2. Stripe
 
 1. **Products → Add product**: name it *Coook! Unlimited*, price **$10.00 USD,
    recurring monthly**. Copy the **price ID** (`price_…`) → `STRIPE_PRICE_MONTHLY`.
@@ -133,7 +121,7 @@ Use the `whsec_…` that command prints as your local `STRIPE_WEBHOOK_SECRET`.
 
 ---
 
-## 4. Local development
+## 3. Local development
 
 ```bash
 cp .env.local.example .env.local
@@ -167,7 +155,7 @@ Open http://localhost:3000.
 
 ---
 
-## 5. Vercel
+## 4. Vercel
 
 1. Push this folder to a new GitHub repository.
 2. Import it as a **new Vercel project** (do not reuse the PiscesAI project).
@@ -185,14 +173,13 @@ Hobby limit; no configuration needed.
 
 ---
 
-## 6. Optional: media resolver
+## 5. Optional: media resolver
 
 `MEDIA_RESOLVER_URL` and `MEDIA_RESOLVER_KEY` are the escape hatch for the one
 genuinely fragile part of this app.
 
 TikTok and Instagram throttle or block requests coming from datacenter IP
 ranges — which is exactly where Vercel runs. Captions usually still come
-through, but the **direct video URL needed for audio transcription often will
 not**, especially for Instagram.
 
 When those variables are set, the app calls
@@ -252,7 +239,6 @@ app/
     recipes/extract/           the whole extraction runs here
     stripe/webhook/            the only thing that writes subscription_status
 lib/
-  extract/                     sourceUrl → metadata → transcribe → structure → pipeline
   recipes/scale.ts             servings maths and fraction formatting
   shopping/aggregate.ts        merges the week's ingredients into one list
   entitlements.ts              free allowance + subscription checks

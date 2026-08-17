@@ -30,7 +30,7 @@ const STEPS = [
   },
   {
     title: "Cook it",
-    body: "The assistant walks you through it, one step at a time.",
+    body: "Step-by-step mode walks you through it, timers and all.",
   },
 ];
 
@@ -50,7 +50,7 @@ export default async function HomePage({
         <h1 className="h1 mt-6">Turn cooking videos into real recipes.</h1>
         <p className="mt-3 text-[17px] text-muted">
           Paste a TikTok, Reel or Short. Get the ingredients with exact amounts,
-          the steps in order, and an assistant that cooks it with you.
+          the steps in order, and a step-by-step mode that cooks it with you.
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">

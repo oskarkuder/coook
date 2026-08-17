@@ -1,17 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, CloseIcon, SendIcon, SparkIcon, Spinner } from "@/components/icons";
+import { CheckIcon, CloseIcon } from "@/components/icons";
 import { formatIngredient, formatMinutes } from "@/lib/recipes/scale";
 import type { Recipe } from "@/lib/types";
-
-type Message = { role: "user" | "assistant"; content: string };
-
-const QUICK_QUESTIONS = [
-  "Can I swap an ingredient?",
-  "How do I know it's done?",
-  "What usually goes wrong here?",
-];
 
 /** Short beep so a timer can finish while you are across the kitchen. */
 function beep() {
@@ -50,10 +42,6 @@ export function CookAssistant({
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
   const [showIngredients, setShowIngredients] = useState(false);
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [question, setQuestion] = useState("");
-  const [asking, setAsking] = useState(false);
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -146,48 +134,6 @@ export function CookAssistant({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0 });
   }, [index]);
-
-  async function ask(text: string) {
-    const trimmed = text.trim();
-    if (!trimmed || asking) return;
-
-    const history = messages.slice(-6);
-    setMessages((current) => [...current, { role: "user", content: trimmed }]);
-    setQuestion("");
-    setAsking(true);
-
-    try {
-      const response = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          recipeId: recipe.id,
-          question: trimmed,
-          stepIndex: index,
-          servings,
-          history,
-        }),
-      });
-      const data = (await response.json()) as { answer?: string; error?: string };
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content:
-            data.answer ??
-            data.error ??
-            "Something went wrong. Try asking again.",
-        },
-      ]);
-    } catch {
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", content: "Could not reach the assistant." },
-      ]);
-    } finally {
-      setAsking(false);
-    }
-  }
 
   const progress = done ? 100 : ((index + 1) / steps.length) * 100;
 
@@ -316,72 +262,6 @@ export function CookAssistant({
                 </ul>
               ) : null}
 
-              {/* ----------------------------------------------- assistant */}
-              <div className="mt-10 border-t border-line pt-6">
-                <div className="flex items-center gap-2">
-                  <SparkIcon className="h-4 w-4 text-muted" />
-                  <p className="text-sm font-medium">Ask about this step</p>
-                </div>
-
-                {messages.length === 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {QUICK_QUESTIONS.map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        className="rounded-full border border-line px-3 py-1.5 text-sm text-muted hover:border-ink hover:text-ink"
-                        onClick={() => void ask(q)}
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-4 space-y-3">
-                    {messages.map((message, i) => (
-                      <div
-                        key={i}
-                        className={
-                          message.role === "user"
-                            ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-ink px-4 py-2.5 text-[15px] text-white"
-                            : "mr-auto max-w-[90%] rounded-2xl rounded-bl-sm bg-surface px-4 py-2.5 text-[15px]"
-                        }
-                      >
-                        {message.content}
-                      </div>
-                    ))}
-                    {asking ? (
-                      <div className="mr-auto flex items-center gap-2 rounded-2xl bg-surface px-4 py-2.5 text-muted">
-                        <Spinner className="h-4 w-4" />
-                        Thinking…
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-
-                <form
-                  className="mt-4 flex gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void ask(question);
-                  }}
-                >
-                  <input
-                    className="input"
-                    placeholder="Type a question…"
-                    value={question}
-                    onChange={(event) => setQuestion(event.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    className="btn-secondary shrink-0 px-4"
-                    disabled={!question.trim() || asking}
-                    aria-label="Send question"
-                  >
-                    <SendIcon className="h-5 w-5" />
-                  </button>
-                </form>
-              </div>
             </>
           )}
         </div>

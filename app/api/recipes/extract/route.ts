@@ -4,7 +4,6 @@ import { getStore } from "@/lib/data";
 import { getEntitlement } from "@/lib/entitlements";
 import { extractRecipe } from "@/lib/extract/pipeline";
 import { detectPlatform, normalizeSourceUrl } from "@/lib/extract/sourceUrl";
-import { DEMO_SAMPLE_EXTRACTION, isDemoMode } from "@/lib/demo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,35 +54,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Demo mode with no OpenAI key: hand back a sample so the whole flow —
-    // progress, recipe page, scaling, plan, shopping list — is clickable.
-    // Recipe sites are exempt: that path is pure JSON-LD parsing, so it works
-    // with no key and should show the real thing.
-    const needsAi = detectPlatform(normalized) !== "website";
-    if (needsAi && isDemoMode() && !process.env.OPENAI_API_KEY?.trim()) {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-      await store.markRecipeReady(user.id, recipeId, {
-        platform: detectPlatform(normalized),
-        url: normalized,
-        author: "demo",
-        thumbnailUrl: null,
-        caption: manualText,
-        transcript: null,
-        title: DEMO_SAMPLE_EXTRACTION.title,
-        summary: DEMO_SAMPLE_EXTRACTION.summary,
-        cuisine: DEMO_SAMPLE_EXTRACTION.cuisine,
-        difficulty: DEMO_SAMPLE_EXTRACTION.difficulty,
-        servings: DEMO_SAMPLE_EXTRACTION.servings,
-        prepMinutes: DEMO_SAMPLE_EXTRACTION.prep_minutes,
-        cookMinutes: DEMO_SAMPLE_EXTRACTION.cook_minutes,
-        ingredients: DEMO_SAMPLE_EXTRACTION.ingredients,
-        steps: DEMO_SAMPLE_EXTRACTION.steps,
-        nutrition: DEMO_SAMPLE_EXTRACTION.nutrition_per_serving,
-        confidence: DEMO_SAMPLE_EXTRACTION.confidence,
-      });
-      return NextResponse.json({ id: recipeId, reused: false, demo: true });
-    }
-
     const outcome = await extractRecipe({ rawUrl: normalized, manualText });
 
     if (!outcome.ok) {
@@ -111,7 +81,7 @@ export async function POST(request: Request) {
       author: metadata.author,
       thumbnailUrl: metadata.thumbnailUrl,
       caption: metadata.caption,
-      transcript: outcome.transcript,
+      transcript: null,
       title: recipe.title,
       summary: recipe.summary,
       cuisine: recipe.cuisine,
@@ -134,8 +104,8 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("extraction crashed", error);
     await store.markRecipeFailed(user.id, recipeId, {
-      code: "PROVIDER_ERROR",
-      message: "Something broke while reading the video. Try again.",
+      code: "READ_FAILED",
+      message: "Something broke while reading that link. Try again.",
       platform: detectPlatform(normalized),
       url: normalized,
     });
