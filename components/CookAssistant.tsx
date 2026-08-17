@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, CloseIcon } from "@/components/icons";
 import { formatIngredient, formatMinutes } from "@/lib/recipes/scale";
+import { stepHasUsefulTimer } from "@/lib/recipes/timers";
 import type { Recipe } from "@/lib/types";
 
 /** Short beep so a timer can finish while you are across the kitchen. */
@@ -100,9 +101,10 @@ export function CookAssistant({
 
   // Reset the timer whenever the step changes.
   useEffect(() => {
-    setSecondsLeft(step?.minutes ? step.minutes * 60 : null);
+    const timed = step && stepHasUsefulTimer(step);
+    setSecondsLeft(timed && step.minutes ? step.minutes * 60 : null);
     setTimerRunning(false);
-  }, [index, step?.minutes]);
+  }, [index, step]);
 
   const goNext = useCallback(() => {
     setIndex((current) => {

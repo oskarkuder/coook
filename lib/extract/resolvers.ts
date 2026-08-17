@@ -191,25 +191,56 @@ async function viaRapidApi(url: string): Promise<ResolvedMedia | null> {
 
 // -------------------------------------------------------------------- custom
 
+/**
+ * Works with almost any provider without a code change, because the parts that
+ * differ between them are all env-configurable:
+ *
+ *   MEDIA_RESOLVER_METHOD       GET (default) or POST
+ *   MEDIA_RESOLVER_URL          the endpoint
+ *   MEDIA_RESOLVER_KEY          your API key
+ *   MEDIA_RESOLVER_AUTH_HEADER  header name, default "Authorization"
+ *   MEDIA_RESOLVER_AUTH_PREFIX  value prefix, default "Bearer " (use "" for raw)
+ *   MEDIA_RESOLVER_PARAM        the url parameter/body field, default "url"
+ *
+ * The response is then walked for the media URL, caption, author and thumbnail,
+ * so a provider renaming a field does not break you either.
+ */
 async function viaCustom(url: string): Promise<ResolvedMedia | null> {
   const endpoint = process.env.MEDIA_RESOLVER_URL?.trim();
   if (!endpoint) return null;
 
-  const headers: Record<string, string> = { accept: "application/json" };
   const key = process.env.MEDIA_RESOLVER_KEY?.trim();
+  const method = (process.env.MEDIA_RESOLVER_METHOD?.trim() || "GET").toUpperCase();
+  const param = process.env.MEDIA_RESOLVER_PARAM?.trim() || "url";
+
+  const headers: Record<string, string> = { accept: "application/json" };
   if (key) {
-    headers.authorization = `Bearer ${key}`;
+    const header = process.env.MEDIA_RESOLVER_AUTH_HEADER?.trim() || "Authorization";
+    const prefix = process.env.MEDIA_RESOLVER_AUTH_PREFIX ?? "Bearer ";
+    headers[header.toLowerCase()] = `${prefix}${key}`;
+    // Harmless for providers that ignore it, and correct for the ones that don't.
     headers["x-api-key"] = key;
   }
 
-  const separator = endpoint.includes("?") ? "&" : "?";
-  const response = await fetch(
-    `${endpoint}${separator}url=${encodeURIComponent(url)}`,
-    { headers, signal: AbortSignal.timeout(TIMEOUT_MS) },
-  );
+  let response: Response;
+  if (method === "POST") {
+    headers["content-type"] = "application/json";
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ [param]: url }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } else {
+    const separator = endpoint.includes("?") ? "&" : "?";
+    response = await fetch(
+      `${endpoint}${separator}${param}=${encodeURIComponent(url)}`,
+      { headers, signal: AbortSignal.timeout(TIMEOUT_MS) },
+    );
+  }
 
   if (!response.ok) {
-    console.error("custom resolver failed", response.status);
+    console.error("custom resolver failed", response.status, await response.text());
     return null;
   }
   const payload = await readJson(response);
